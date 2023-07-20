@@ -7,6 +7,5 @@ mod test_gpu {
 mod util;
 
 fn main() {
-    // engine_base::run::<BoidsExample>();
     engine_base::run::<TestGPU>();
 }

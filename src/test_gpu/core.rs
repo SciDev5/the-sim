@@ -43,35 +43,6 @@ impl EngineBase for TestGPU {
         _queue: &wgpu::Queue,
     ) -> Self {
         // let draw_shader_module = device.create_shader_module(include_wgsl!("draw.wgsl"));
-        // let vs_src = include_str!("shaders/draw.vert");
-        // // let vs_src = include_glsl!("src/test_gpu/shaders/draw.vert");
-        // // let fs_src = include_glsl!("src/test_gpu/shaders/draw.frag");
-
-        // // Parse the given shader code and store its representation.
-        // let options = naga::ShaderStage::Vertex.into();
-        // // let options = naga::front::spv::Options {
-        // //     adjust_coordinate_space: false, // we require NDC_Y_UP feature
-        // //     strict_capabilities: true,
-        // //     block_ctx_dump_prefix: None,
-        // // };
-        // let mut parser = naga::front::glsl::Frontend::default();
-        // // let parser = naga::front::spv::Frontend::new(vs_src.iter().cloned(), &options);
-        // let module = parser.parse(&options, vs_src).unwrap();
-        // let vs_module = device.create_shader_module(ShaderModuleDescriptor{
-        //     label: None,
-        //     source: wgpu::ShaderSource::Naga(Cow::Owned(module))
-        // });
-
-        // // let vs_module = device.create_shader_module(wgpu::ShaderSource::Glsl(vs_src.into()));
-        // // let fs_module = device.create_shader_module(wgpu::ShaderSource::Glsl(fs_src.into()));
-        // // let vs_module = device.create_shader_module(ShaderModuleDescriptor {
-        // //     label: None,
-        // //     source: wgpu::ShaderSource::SpirV(Cow::Borrowed(vs_src)),
-        // // });
-        // let fs_module = device.create_shader_module(ShaderModuleDescriptor {
-        //     label: None,
-        //     source: wgpu::ShaderSource::SpirV(Cow::Borrowed(fs_src)),
-        // });
 
         let fs_module =
             device.create_shader_module(include_glsl!("shaders/draw.frag", ShaderStage::Fragment));
@@ -87,7 +58,6 @@ impl EngineBase for TestGPU {
             })),
             vertex: VertexState {
                 // module: &draw_shader_module,
-                // module: &device.create_shader_module(ShaderModuleDescriptor { label: None, source: wgpu::ShaderSource::Glsl { shader: Cow::Borrowed(include_str!("draw-vert.glsl")), stage: ShaderStage::Vertex, defines: Default::default() }}),
                 module: &vs_module,
                 buffers: &[VertexBufferLayout {
                     array_stride: size_of::<f32>() as u64 * 2,
@@ -99,7 +69,6 @@ impl EngineBase for TestGPU {
             },
             fragment: Some(FragmentState {
                 // module: &draw_shader_module,
-                // module: &device.create_shader_module(ShaderModuleDescriptor { label: None, source: wgpu::ShaderSource::Glsl { shader: Cow::Borrowed(include_str!("draw-frag.glsl")), stage: ShaderStage::Vertex, defines: Default::default() }}),
                 module: &fs_module,
                 // entry_point: "frag",
                 entry_point: "main",
