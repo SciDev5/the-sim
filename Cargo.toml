@@ -1,0 +1,21 @@
+[package]
+name = "the-sim"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+wgpu = {version = "0.16", features = ["naga"]}
+winit = "0.28"
+pollster = "0.3"
+env_logger = "0.10"
+bytemuck = "1.13"
+nanorand = "0.7"
+async-executor = "1.5"
+log = "0.4"
+vk-shader-macros = "0.2"
+naga = {version = "0.12", features = ["glsl-in"]}
+
+[dev-dependencies]
+cargo-wgsl = "0.0.14"
