@@ -5,6 +5,7 @@ mod test_gpu {
     pub mod core;
 }
 mod util;
+mod texture;
 
 fn main() {
     engine_base::run::<TestGPU>();
