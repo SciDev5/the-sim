@@ -25,13 +25,14 @@ pub struct TestGPU {
     buff: Buffer,
     bufftex: crate::texture::Texture,
     bufftex_bind_group: BindGroup,
+    reset_tex: bool,
 }
 
 impl EngineBase for TestGPU {
     fn title() -> &'static str {
         "test gpu"
     }
-    
+
     fn required_limits() -> wgpu::Limits {
         wgpu::Limits::downlevel_defaults()
     }
@@ -55,16 +56,28 @@ impl EngineBase for TestGPU {
         let compute_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("compute_bind_group_layout"),
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: false },
-                        has_dynamic_offset: false,
-                        min_binding_size: wgpu::BufferSize::new(4 * 512 * 512),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: false },
+                            has_dynamic_offset: false,
+                            min_binding_size: wgpu::BufferSize::new(4 * 512 * 512),
+                        },
+                        count: None,
                     },
-                    count: None,
-                }],
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::StorageTexture {
+                            access: wgpu::StorageTextureAccess::WriteOnly,
+                            format: wgpu::TextureFormat::Rgba8Unorm,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                        },
+                        count: None,
+                    },
+                ],
             });
         let compute_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -106,7 +119,9 @@ impl EngineBase for TestGPU {
         let buff = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: None,
             contents: &vec![128; 4 * 512 * 512][..],
-            usage: wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
+            usage: wgpu::BufferUsages::COPY_SRC
+                | wgpu::BufferUsages::COPY_DST
+                | wgpu::BufferUsages::STORAGE,
         });
         let bufftex = crate::texture::Texture::create_uninit(Some("bufftex"), (512, 512), &device);
         bufftex.write_buffer(
@@ -136,14 +151,20 @@ impl EngineBase for TestGPU {
         let buff_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("buff_bind_group"),
             layout: &compute_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                    buffer: &buff,
-                    offset: 0,
-                    size: wgpu::BufferSize::new(4 * 512 * 512),
-                }),
-            }],
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                        buffer: &buff,
+                        offset: 0,
+                        size: wgpu::BufferSize::new(4 * 512 * 512),
+                    }),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&bufftex.view),
+                },
+            ],
         });
 
         let cattex = crate::texture::Texture::create(load_img!("cat.jpg").unwrap(), device, queue);
@@ -218,6 +239,7 @@ impl EngineBase for TestGPU {
             bufftex,
             compute_pipeline,
             buff_bind_group,
+            reset_tex: false,
         }
     }
     fn resize(
@@ -228,8 +250,19 @@ impl EngineBase for TestGPU {
     ) {
         // ignore
     }
-    fn update(&mut self, _event: winit::event::WindowEvent) {
+    fn update(&mut self, event: winit::event::WindowEvent) {
         // ignore
+        match event {
+            winit::event::WindowEvent::KeyboardInput { input, .. } => {
+                match input.virtual_keycode {
+                    Some(winit::event::VirtualKeyCode::Space) => {
+                        self.reset_tex = true;
+                    }
+                    _ => {}
+                }
+            }
+            _ => {}
+        }
     }
     fn render(
         &mut self,
@@ -241,6 +274,20 @@ impl EngineBase for TestGPU {
         let mut command_encoder =
             device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
+        if self.reset_tex {
+            self.reset_tex = false;
+            queue.write_buffer(&self.buff, 0, &[128; 512*512*4]);
+            self.bufftex.write_buffer_commandencoder(
+                &self.buff,
+                wgpu::ImageDataLayout {
+                    offset: 0,
+                    bytes_per_row: Some(512 * 4),
+                    rows_per_image: Some(512),
+                },
+                &mut command_encoder,
+            );
+        }
+
         {
             let mut pass =
                 command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
@@ -248,16 +295,6 @@ impl EngineBase for TestGPU {
             pass.set_bind_group(0, &self.buff_bind_group, &[]);
             pass.dispatch_workgroups(512 / 16, 512 / 16, 1);
         }
-
-        self.bufftex.write_buffer_commandencoder(
-            &self.buff,
-            wgpu::ImageDataLayout {
-                offset: 0,
-                bytes_per_row: Some(512 * 4),
-                rows_per_image: Some(512),
-            },
-            &mut command_encoder,
-        );
 
         {
             let mut pass = command_encoder.begin_render_pass(&RenderPassDescriptor {

@@ -15,5 +15,11 @@ vec4 sample_bufftex(vec2 coord) {
 }
 
 void main() {
-    FragColor = vec4(uv, 1.0, 1.0) * sample_cattex(uv) * sample_bufftex(uv);
+    vec4 b = sample_bufftex(uv);
+    // b = sample_bufftex(uv + (b.bg * 0.04 - 0.02));
+    // b = sample_bufftex(uv + (b.bg * 0.02 - 0.01));
+    FragColor = vec4(uv, 1.0, 1.0) 
+    // * sample_cattex(uv + (b.bg * 0.02 - 0.01)) 
+    * sample_cattex(uv) 
+    * b;
 }
