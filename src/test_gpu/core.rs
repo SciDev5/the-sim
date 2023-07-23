@@ -1,29 +1,26 @@
-use std::mem::size_of;
-
-use bytemuck::bytes_of;
 use naga::ShaderStage;
 use wgpu::{
-    include_wgsl,
-    util::{BufferInitDescriptor, DeviceExt},
-    vertex_attr_array, BindGroup, Buffer, BufferUsages, Color, FragmentState, MultisampleState,
-    Operations, PipelineLayoutDescriptor, PrimitiveState, RenderPassColorAttachment,
-    RenderPassDescriptor, RenderPipeline, RenderPipelineDescriptor, VertexBufferLayout,
-    VertexState, VertexStepMode,
+    include_wgsl, vertex_attr_array, BindGroup, Color, FragmentState, MultisampleState, Operations,
+    PipelineLayoutDescriptor, PrimitiveState, RenderPassColorAttachment, RenderPassDescriptor,
+    RenderPipeline, RenderPipelineDescriptor, VertexState, VertexStepMode,
 };
 
 use crate::{
+    bind_group::TypedBindGroupGen,
+    buffer::{Buffer1d, BufferInfo1d},
     engine_base::{EngineBase, Spawner},
     include_glsl, load_img,
+    texture::{Tex2dFragBindGroup, Tex2dFragBindGroupInit, Texture2D},
 };
 
 pub struct TestGPU {
     compute_pipeline: wgpu::ComputePipeline,
     buff_bind_group: BindGroup,
     test_render_pipeline: RenderPipeline,
-    vertex_buffer: Buffer,
+    vertex_buffer: Buffer1d<[f32; 2]>,
     cattex_bind_group: BindGroup,
-    buff: Buffer,
-    bufftex: crate::texture::Texture,
+    buff: Buffer1d<[u8; 4]>,
+    _bufftex: crate::texture::Texture2D,
     bufftex_bind_group: BindGroup,
     reset_tex: bool,
 }
@@ -49,6 +46,17 @@ impl EngineBase for TestGPU {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
     ) -> Self {
+        let buf_info: BufferInfo1d<[u8; 4]> = BufferInfo1d::new(
+            1,
+            wgpu::ShaderStages::COMPUTE,
+            wgpu::BufferBindingType::Storage { read_only: false },
+        );
+        let vertbuf_info: BufferInfo1d<[f32; 2]> = BufferInfo1d::new(
+            3,
+            wgpu::ShaderStages::VERTEX,
+            wgpu::BufferBindingType::default(),
+        );
+
         // let cs_module = device
         //     .create_shader_module(include_glsl!("shaders/compute.comp", ShaderStage::Compute));
         let cs_module = device.create_shader_module(include_wgsl!("shaders/compute.wgsl"));
@@ -56,28 +64,7 @@ impl EngineBase for TestGPU {
         let compute_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("compute_bind_group_layout"),
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Storage { read_only: false },
-                            has_dynamic_offset: false,
-                            min_binding_size: wgpu::BufferSize::new(4 * 512 * 512),
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::StorageTexture {
-                            access: wgpu::StorageTextureAccess::WriteOnly,
-                            format: wgpu::TextureFormat::Rgba8Unorm,
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                        },
-                        count: None,
-                    },
-                ],
+                entries: &[buf_info.layout_entry(0), Texture2D::layout_entry_compute(1, wgpu::StorageTextureAccess::WriteOnly)],
             });
         let compute_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -93,95 +80,21 @@ impl EngineBase for TestGPU {
             entry_point: "main",
         });
 
-        let texture_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("texture_bind_group_layout"),
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            multisampled: false,
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                        count: None,
-                    },
-                ],
-            });
+        let texture_bind_group_layout = Tex2dFragBindGroup::new(&device, Tex2dFragBindGroupInit);
 
-        let buff = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: None,
-            contents: &vec![128; 4 * 512 * 512][..],
-            usage: wgpu::BufferUsages::COPY_SRC
-                | wgpu::BufferUsages::COPY_DST
-                | wgpu::BufferUsages::STORAGE,
-        });
-        let bufftex = crate::texture::Texture::create_uninit(Some("bufftex"), (512, 512), &device);
-        bufftex.write_buffer(
-            &buff,
-            wgpu::ImageDataLayout {
-                offset: 0,
-                bytes_per_row: Some(4 * 512),
-                rows_per_image: Some(512),
-            },
-            &device,
-            &queue,
-        );
-        let bufftex_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("bufftex_bind_group"),
-            layout: &texture_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&bufftex.view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&bufftex.sampler),
-                },
-            ],
-        });
+        let buff = buf_info.create(&device, &[[128, 128, 128, 128]; 512 * 512][..]);
+        let bufftex =
+            crate::texture::Texture2D::create_uninit("bufftex", true, (512, 512), &device);
+        let bufftex_bind_group = texture_bind_group_layout.create(&bufftex);
         let buff_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("buff_bind_group"),
             layout: &compute_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                        buffer: &buff,
-                        offset: 0,
-                        size: wgpu::BufferSize::new(4 * 512 * 512),
-                    }),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(&bufftex.view),
-                },
-            ],
+            entries: &[buff.bind_group_entry(0), bufftex.bind_group_entry(1)],
         });
 
-        let cattex = crate::texture::Texture::create(load_img!("cat.jpg").unwrap(), device, queue);
-        let cattex_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("cattex_bind_group"),
-            layout: &texture_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&cattex.view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&cattex.sampler),
-                },
-            ],
-        });
+        let cattex =
+            crate::texture::Texture2D::create(load_img!("cat.jpg").unwrap(), false, device, queue);
+        let cattex_bind_group = texture_bind_group_layout.create(&cattex);
 
         // let draw_shader_module = device.create_shader_module(include_wgsl!("draw.wgsl"));
         let fs_module =
@@ -193,7 +106,10 @@ impl EngineBase for TestGPU {
             label: Some("test_render_pipeline"),
             layout: Some(&device.create_pipeline_layout(&PipelineLayoutDescriptor {
                 label: None,
-                bind_group_layouts: &[&texture_bind_group_layout, &texture_bind_group_layout],
+                bind_group_layouts: &[
+                    texture_bind_group_layout.layout(),
+                    texture_bind_group_layout.layout(),
+                ],
                 push_constant_ranges: &[],
             })),
             vertex: VertexState {
@@ -201,11 +117,8 @@ impl EngineBase for TestGPU {
                 // entry_point: "vert",
                 module: &vs_module,
                 entry_point: "main",
-                buffers: &[VertexBufferLayout {
-                    array_stride: size_of::<f32>() as u64 * 2,
-                    attributes: &vertex_attr_array![0 => Float32x2],
-                    step_mode: VertexStepMode::Vertex,
-                }],
+                buffers: &[vertbuf_info
+                    .layout_vertex(&vertex_attr_array![0 => Float32x2], VertexStepMode::Vertex)],
             },
             fragment: Some(FragmentState {
                 // module: &draw_shader_module,
@@ -220,15 +133,17 @@ impl EngineBase for TestGPU {
             depth_stencil: None,
         });
 
-        let vertices = [
-            [[0.0, 0.0], [0.0, 1.0], [1.0, 0.0f32]],
-            [[1.0, 1.0], [1.0, 0.0], [0.0, 1.0]],
-        ];
-        let vertex_buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("vertex_buffer"),
-            usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
-            contents: bytes_of(&vertices),
-        });
+        let vertex_buffer = vertbuf_info.create(
+            &device,
+            &[
+                [0.0, 0.0],
+                [0.0, 1.0],
+                [1.0, 0.0f32],
+                [1.0, 1.0],
+                [1.0, 0.0],
+                [0.0, 1.0],
+            ],
+        );
 
         Self {
             test_render_pipeline,
@@ -236,7 +151,7 @@ impl EngineBase for TestGPU {
             cattex_bind_group,
             buff,
             bufftex_bind_group,
-            bufftex,
+            _bufftex: bufftex,
             compute_pipeline,
             buff_bind_group,
             reset_tex: false,
@@ -253,14 +168,12 @@ impl EngineBase for TestGPU {
     fn update(&mut self, event: winit::event::WindowEvent) {
         // ignore
         match event {
-            winit::event::WindowEvent::KeyboardInput { input, .. } => {
-                match input.virtual_keycode {
-                    Some(winit::event::VirtualKeyCode::Space) => {
-                        self.reset_tex = true;
-                    }
-                    _ => {}
+            winit::event::WindowEvent::KeyboardInput { input, .. } => match input.virtual_keycode {
+                Some(winit::event::VirtualKeyCode::Space) => {
+                    self.reset_tex = true;
                 }
-            }
+                _ => {}
+            },
             _ => {}
         }
     }
@@ -276,16 +189,7 @@ impl EngineBase for TestGPU {
 
         if self.reset_tex {
             self.reset_tex = false;
-            queue.write_buffer(&self.buff, 0, &[128; 512*512*4]);
-            self.bufftex.write_buffer_commandencoder(
-                &self.buff,
-                wgpu::ImageDataLayout {
-                    offset: 0,
-                    bytes_per_row: Some(512 * 4),
-                    rows_per_image: Some(512),
-                },
-                &mut command_encoder,
-            );
+            self.buff.write(0, &[[128; 4]; 512 * 512], queue);
         }
 
         {

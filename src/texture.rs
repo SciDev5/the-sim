@@ -1,26 +1,87 @@
 use image::GenericImageView;
 
+use crate::bind_group::{BindGroupData, TypedBindGroupGenInner, TypedBindGroupInit};
+
 #[macro_export]
 macro_rules! load_img {
     ($loc: tt) => {
-        image::load_from_memory(include_bytes!($loc)).map(|it| (it, Some($loc)))
+        image::load_from_memory(include_bytes!($loc)).map(|it| (it, $loc))
     };
 }
 
-pub struct Texture {
+#[derive(Debug, Clone, Copy)]
+pub struct Tex2dFragBindGroupInit;
+impl TypedBindGroupInit for Tex2dFragBindGroupInit {
+    fn label(&self) -> &'static str {
+        "texture2d_fragment:BindGroup"
+    }
+    fn entries(&self) -> Vec<wgpu::BindGroupLayoutEntry> {
+        vec![
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    multisampled: false,
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                count: None,
+            },
+        ]
+    }
+}
+
+pub struct Tex2dFragBindGroup<'a>(BindGroupData<'a>);
+
+impl<'a> TypedBindGroupGenInner<'a, Tex2dFragBindGroupInit, Texture2D> for Tex2dFragBindGroup<'a> {
+    fn from_bind_group_data<'b: 'a>(
+        _init: Tex2dFragBindGroupInit,
+        data: BindGroupData<'b>,
+    ) -> Self {
+        Self(data)
+    }
+    fn bind_group_data(&self) -> &BindGroupData {
+        &self.0
+    }
+    fn entries_from_data<'b>(&self, data: &'b Texture2D) -> Vec<wgpu::BindGroupEntry<'b>> {
+        vec![
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(&data.view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::Sampler(&data.sampler),
+            },
+        ]
+    }
+    fn label(data: &Texture2D) -> &str {
+        data.label.as_str()
+    }
+}
+
+pub struct Texture2D {
+    pub label: String,
     pub texture: wgpu::Texture,
     pub view: wgpu::TextureView,
     pub sampler: wgpu::Sampler,
 }
 
-impl Texture {
+impl Texture2D {
     pub fn create_uninit(
-        label: Option<&str>,
+        label: &str,
+        for_compute: bool,
         (width, height): (u32, u32),
         device: &wgpu::Device,
     ) -> Self {
         let texture = device.create_texture(&wgpu::TextureDescriptor {
-            label,
+            label: Some(label),
             size: wgpu::Extent3d {
                 width,
                 height,
@@ -30,11 +91,16 @@ impl Texture {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::STORAGE_BINDING,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::COPY_DST
+                | if for_compute {
+                    wgpu::TextureUsages::STORAGE_BINDING
+                } else {
+                    wgpu::TextureUsages::empty()
+                },
             view_formats: &[],
         });
-        let view = texture.create_view(&wgpu::TextureViewDescriptor{
-            // format: Some(wgpu::TextureFormat::Rgba8Unorm),
+        let view = texture.create_view(&wgpu::TextureViewDescriptor {
             ..Default::default()
         });
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
@@ -48,17 +114,19 @@ impl Texture {
         });
 
         Self {
+            label: label.to_string(),
             texture,
             view,
             sampler,
         }
     }
     pub fn create(
-        (img, label): (image::DynamicImage, Option<&str>),
+        (img, label): (image::DynamicImage, &str),
+        for_compute: bool,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
     ) -> Self {
-        let this = Self::create_uninit(label, img.dimensions(), device);
+        let this = Self::create_uninit(label, for_compute, img.dimensions(), device);
         this.write_image(img, queue);
         this
     }
@@ -82,28 +150,26 @@ impl Texture {
             self.texture.size(),
         );
     }
-    pub fn write_buffer(&self, buffer: &wgpu::Buffer, layout: wgpu::ImageDataLayout, device: &wgpu::Device, queue: &wgpu::Queue) {
-            let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("texture_buffer_copy_encoder"),
-            });
 
-            self.write_buffer_commandencoder(buffer, layout, &mut encoder);
-
-            queue.submit(Some(encoder.finish().into()));
+    pub fn layout_entry_compute(
+        binding: u32,
+        access: wgpu::StorageTextureAccess,
+    ) -> wgpu::BindGroupLayoutEntry {
+        wgpu::BindGroupLayoutEntry {
+            binding,
+            visibility: wgpu::ShaderStages::COMPUTE,
+            ty: wgpu::BindingType::StorageTexture {
+                access,
+                format: wgpu::TextureFormat::Rgba8Unorm,
+                view_dimension: wgpu::TextureViewDimension::D2,
+            },
+            count: None,
+        }
     }
-    pub fn write_buffer_commandencoder(&self, buffer: &wgpu::Buffer, layout: wgpu::ImageDataLayout, encoder: &mut wgpu::CommandEncoder) {
-            encoder.copy_buffer_to_texture(
-                wgpu::ImageCopyBufferBase {
-                    buffer: &buffer,
-                    layout,
-                },
-                wgpu::ImageCopyTextureBase {
-                    texture: &self.texture,
-                    mip_level: 0,
-                    origin: wgpu::Origin3d::ZERO,
-                    aspect: wgpu::TextureAspect::All,
-                },
-                self.texture.size(),
-            );
+    pub fn bind_group_entry(&self, binding: u32) -> wgpu::BindGroupEntry {
+        wgpu::BindGroupEntry {
+            binding,
+            resource: wgpu::BindingResource::TextureView(&self.view),
+        }
     }
 }

@@ -6,6 +6,8 @@ mod test_gpu {
 }
 mod util;
 mod texture;
+mod bind_group;
+mod buffer;
 
 fn main() {
     engine_base::run::<TestGPU>();
