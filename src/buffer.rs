@@ -55,6 +55,7 @@ impl<T: Sized + Pod + Zeroable> BufferInfo1d<T> {
         Buffer1d {
             _info: *self,
             buffer: self.create_buffer(&device, data),
+            len: data.len(),
         }
     }
 }
@@ -62,6 +63,7 @@ impl<T: Sized + Pod + Zeroable> BufferInfo1d<T> {
 pub struct Buffer1d<T: Sized + Pod + Zeroable> {
     _info: BufferInfo1d<T>,
     buffer: wgpu::Buffer,
+    len: usize,
 }
 
 impl<T: Pod + Zeroable> Buffer1d<T> {
@@ -74,7 +76,7 @@ impl<T: Pod + Zeroable> Buffer1d<T> {
             resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
                 buffer: &self.buffer,
                 offset: 0,
-                size: wgpu::BufferSize::new(4 * 512 * 512),
+                size: wgpu::BufferSize::new((size_of::<T>() * self.len) as u64),
             }),
         }
     }
