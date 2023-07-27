@@ -10,7 +10,7 @@ use crate::{
     buffer::{Buffer1d, BufferInfo1d},
     engine_base::{EngineBase, Spawner},
     include_glsl, load_img,
-    texture::{Tex2dFragBindGroup, Tex2dFragBindGroupInit, Texture2D},
+    texture::{Tex2dFragBindGroup, Tex2dFragBindGroupInit},
 };
 
 pub struct TestGPU {
@@ -46,16 +46,22 @@ impl EngineBase for TestGPU {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
     ) -> Self {
-        let buf_info: BufferInfo1d<[u8; 4]> = BufferInfo1d::new(
-            1,
-            wgpu::ShaderStages::COMPUTE,
-            wgpu::BufferBindingType::Storage { read_only: false },
-        );
-        let vertbuf_info: BufferInfo1d<[f32; 2]> = BufferInfo1d::new(
-            3,
-            wgpu::ShaderStages::VERTEX,
-            wgpu::BufferBindingType::default(),
-        );
+        let buf_info: BufferInfo1d<[u8; 4]> = BufferInfo1d::new(1, wgpu::ShaderStages::COMPUTE);
+        let vertbuf_info: BufferInfo1d<[f32; 2]> = BufferInfo1d::new(3, wgpu::ShaderStages::VERTEX);
+
+        let buff = buf_info.create(&device, &[[128, 128, 128, 128]; 512 * 512][..]);
+        let bufftex =
+            crate::texture::Texture2D::create_uninit("bufftex", true, (512, 512), &device);
+
+        let cattex =
+            crate::texture::Texture2D::create(load_img!("cat.jpg").unwrap(), false, device, queue);
+
+        // let draw_shader_module = device.create_shader_module(include_wgsl!("draw.wgsl"));
+        let fs_module =
+            device.create_shader_module(include_glsl!("shaders/draw.frag", ShaderStage::Fragment));
+        let vs_module =
+            device.create_shader_module(include_glsl!("shaders/draw.vert", ShaderStage::Vertex));
+
 
         // let cs_module = device
         //     .create_shader_module(include_glsl!("shaders/compute.comp", ShaderStage::Compute));
@@ -64,7 +70,10 @@ impl EngineBase for TestGPU {
         let compute_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("compute_bind_group_layout"),
-                entries: &[buf_info.layout_entry(0), Texture2D::layout_entry_compute(1, wgpu::StorageTextureAccess::WriteOnly)],
+                entries: &[
+                    buf_info.layout_entry(0, wgpu::BufferBindingType::Storage { read_only: false }),
+                    bufftex.layout_entry_compute(1, wgpu::StorageTextureAccess::WriteOnly),
+                ],
             });
         let compute_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -81,26 +90,13 @@ impl EngineBase for TestGPU {
         });
 
         let texture_bind_group_layout = Tex2dFragBindGroup::new(&device, Tex2dFragBindGroupInit);
-
-        let buff = buf_info.create(&device, &[[128, 128, 128, 128]; 512 * 512][..]);
-        let bufftex =
-            crate::texture::Texture2D::create_uninit("bufftex", true, (512, 512), &device);
         let bufftex_bind_group = texture_bind_group_layout.create(&bufftex);
         let buff_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("buff_bind_group"),
             layout: &compute_bind_group_layout,
-            entries: &[buff.bind_group_entry(0), bufftex.bind_group_entry(1)],
+            entries: &[buff.bind_group_entry(0, ..), bufftex.bind_group_entry(1)],
         });
-
-        let cattex =
-            crate::texture::Texture2D::create(load_img!("cat.jpg").unwrap(), false, device, queue);
         let cattex_bind_group = texture_bind_group_layout.create(&cattex);
-
-        // let draw_shader_module = device.create_shader_module(include_wgsl!("draw.wgsl"));
-        let fs_module =
-            device.create_shader_module(include_glsl!("shaders/draw.frag", ShaderStage::Fragment));
-        let vs_module =
-            device.create_shader_module(include_glsl!("shaders/draw.vert", ShaderStage::Vertex));
 
         let test_render_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
             label: Some("test_render_pipeline"),

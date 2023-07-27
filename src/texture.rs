@@ -152,6 +152,7 @@ impl Texture2D {
     }
 
     pub fn layout_entry_compute(
+        &self,
         binding: u32,
         access: wgpu::StorageTextureAccess,
     ) -> wgpu::BindGroupLayoutEntry {

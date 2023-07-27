@@ -1,4 +1,3 @@
-use test_gpu::core::TestGPU;
 use wave::core::Wave;
 
 mod engine_base;

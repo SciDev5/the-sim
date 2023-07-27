@@ -26,7 +26,7 @@ pub struct Wave {
     wave_data: [Buffer1d<WavePoint>; 2],
     compute_bind_group: [wgpu::BindGroup; 2],
 
-    out_tex: Texture2D,
+    _out_tex: Texture2D,
     out_tex_bind_group: wgpu::BindGroup,
 
     square_verts: Buffer1d<[f32; 2]>,
@@ -72,13 +72,6 @@ impl EngineBase for Wave {
             let wave_data_info: BufferInfo1d<WavePoint> = BufferInfo1d::new(
                 (SIZE * SIZE) as usize,
                 wgpu::ShaderStages::COMPUTE,
-                wgpu::BufferBindingType::Storage { read_only: false },
-            );
-
-            let wave_data_info_readonly: BufferInfo1d<WavePoint> = BufferInfo1d::new(
-                (SIZE * SIZE) as usize,
-                wgpu::ShaderStages::COMPUTE,
-                wgpu::BufferBindingType::Storage { read_only: true },
             );
 
             let mut v = vec![WavePoint { x: 0.0, v: 0.0 }; (SIZE * SIZE) as usize];
@@ -101,9 +94,9 @@ impl EngineBase for Wave {
                 device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                     label: None,
                     entries: &[
-                        wave_data_info_readonly.layout_entry(0),
-                        wave_data_info.layout_entry(1),
-                        Texture2D::layout_entry_compute(2, wgpu::StorageTextureAccess::WriteOnly),
+                        wave_data_info.layout_entry(0, wgpu::BufferBindingType::Storage { read_only: true }),
+                        wave_data_info.layout_entry(1, wgpu::BufferBindingType::Storage { read_only: false }),
+                        out_tex.layout_entry_compute(2, wgpu::StorageTextureAccess::WriteOnly),
                     ],
                 });
             let compute_bind_group = std::array::from_fn(|i| {
@@ -111,8 +104,8 @@ impl EngineBase for Wave {
                 label: None,
                 layout: &compute_bind_group_layout,
                 entries: &[
-                    wave_data[i].bind_group_entry(0),
-                    wave_data[(i+1)%2].bind_group_entry(1),
+                    wave_data[i].bind_group_entry(0, ..),
+                    wave_data[(i+1)%2].bind_group_entry(1, ..),
                     out_tex.bind_group_entry(2),
                 ],
             })
@@ -138,7 +131,6 @@ impl EngineBase for Wave {
             let square_verts_info = BufferInfo1d::new(
                 6,
                 wgpu::ShaderStages::VERTEX,
-                wgpu::BufferBindingType::Uniform,
             );
             let square_verts = square_verts_info.create(
                 &device,
@@ -186,7 +178,7 @@ impl EngineBase for Wave {
             render_pipeline,
             wave_data,
             compute_bind_group,
-            out_tex,
+            _out_tex: out_tex,
             out_tex_bind_group,
             square_verts,
             frame_num: 0,
