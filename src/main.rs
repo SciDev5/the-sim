@@ -12,6 +12,8 @@ mod texture;
 mod bind_group;
 mod buffer;
 
+mod new_abstractions;
+
 fn main() {
     engine_base::run::<Wave>();
 }
