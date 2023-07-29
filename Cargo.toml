@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-wgpu = {version = "0.16", features = ["naga"]}
+wgpu = {version = "0.17", features = ["naga"]}
 winit = "0.28"
 pollster = "0.3"
 env_logger = "0.10"
@@ -14,7 +14,7 @@ bytemuck = { version = "1.13", features = [ "derive" ] }
 nanorand = "0.7"
 async-executor = "1.5"
 log = "0.4"
-naga = {version = "0.12", features = ["glsl-in"]}
+naga = {version = "0.13", features = ["glsl-in"]}
 image = "0.24"
 anyhow = "1"
 paste = "1.0"
