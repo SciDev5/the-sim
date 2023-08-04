@@ -9,7 +9,7 @@ use crate::{
     new_abstractions::{
         Buff, BuffInfo, TISampler, TIStorageTexture, TITexture, Tex, TexInfo, VertexLayoutInfo,
         ZSTValue, _2D,
-    },
+    }, compute_pipeline_info, render_pipeline_info,
 };
 
 const SIZE: u32 = 256;
@@ -25,16 +25,36 @@ impl VertexLayoutInfo for WavePoint {
     const ATTRIBUTES: &'static [wgpu::VertexAttribute] = &vertex_attr_array![0 => Float32x2];
 }
 
+
+bind_group_info!(Tex2DBindGroup; wgpu::ShaderStages::FRAGMENT;
+    0 => (TexInfo::<_2D,TITexture>, wgpu::TextureSampleType::Float { filterable: true }),
+    1 => (TexInfo::<_2D,TISampler>, wgpu::SamplerBindingType::Filtering),
+);
+bind_group_info!(ComputeBindGroup; wgpu::ShaderStages::COMPUTE;
+    0 => (BuffInfo::<WavePoint>, wgpu::BufferBindingType::Storage { read_only: true }),
+    1 => (BuffInfo::<WavePoint>, wgpu::BufferBindingType::Storage { read_only: false }),
+    2 => (TexInfo::<_2D, TIStorageTexture>, wgpu::StorageTextureAccess::WriteOnly),
+);
+compute_pipeline_info!(TheComputePipeline;
+    0 => ComputeBindGroupInfo<'device>,
+);
+render_pipeline_info!(TheRenderPipeline;
+    0 => Tex2DBindGroupInfo<'device>,
+    ;
+    0 => ([f32; 2], wgpu::VertexStepMode::Vertex),
+);
+
 pub struct Wave {
-    compute_pipeline: wgpu::ComputePipeline,
-    render_pipeline: wgpu::RenderPipeline,
+    compute_pipeline: TheComputePipeline,
+    render_pipeline: TheRenderPipeline,
 
     wave_data: [Buff<WavePoint>; 2],
-    compute_bind_group: [wgpu::BindGroup; 2],
+    compute_bind_group: [ComputeBindGroup; 2],
 
-    out_tex_bind_group: wgpu::BindGroup,
+    out_tex_bind_group: Tex2DBindGroup,
 
     square_verts: Buff<[f32; 2]>,
+    square_indices: Buff<u16>,
 
     frame_num: u8,
 
@@ -62,29 +82,22 @@ impl EngineBase for Wave {
         device: &wgpu::Device,
         _queue: &wgpu::Queue,
     ) -> Self {
-        let tex2d_bind_group_info = Tex2DBindGroup::new(&device);
-        bind_group_info!(Tex2DBindGroup; wgpu::ShaderStages::FRAGMENT;
-            0 => (TexInfo::<_2D,TITexture>, wgpu::TextureSampleType::Float { filterable: true }),
-            1 => (TexInfo::<_2D,TISampler>, wgpu::SamplerBindingType::Filtering),
-        );
-
+        let tex2d_bind_group_info = Tex2DBindGroupInfo::new(&device);
         let compute_bind_group_info = ComputeBindGroupInfo::new(&device);
-        bind_group_info!(ComputeBindGroupInfo; wgpu::ShaderStages::COMPUTE;
-            0 => (BuffInfo::<WavePoint>, wgpu::BufferBindingType::Storage { read_only: true }),
-            1 => (BuffInfo::<WavePoint>, wgpu::BufferBindingType::Storage { read_only: false }),
-            2 => (TexInfo::<_2D, TIStorageTexture>, wgpu::StorageTextureAccess::WriteOnly),
-        );
 
         const WAVE_DATA: BuffInfo<WavePoint> = BuffInfo::IT;
 
         const SQUARE_VERTS: BuffInfo<[f32; 2]> = BuffInfo::IT;
-        const SQUARE_VERTS_DATA: [[f32; 2]; 6] = [
+        const SQUARE_INDICES: BuffInfo<u16> = BuffInfo::IT;
+        const SQUARE_VERTS_DATA: [[f32; 2]; 4] = [
             [-1.0, -1.0],
             [-1.0, 1.0],
             [1.0, -1.0],
-            [-1.0, 1.0],
             [1.0, 1.0],
-            [1.0, -1.0],
+        ];
+        const SQUARE_INDICES_DATA: [u16; 6] = [
+            0, 1, 2,
+            3, 2, 1
         ];
         impl VertexLayoutInfo for [f32; 2] {
             const ATTRIBUTES: &'static [wgpu::VertexAttribute] =
@@ -117,23 +130,12 @@ impl EngineBase for Wave {
                 )
             });
 
-            let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: None,
-                layout: Some(
-                    &device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                        label: None,
-                        bind_group_layouts: &[&compute_bind_group_info.layout],
-                        push_constant_ranges: &[],
-                    }),
-                ),
-                module: &shader_module,
-                entry_point: "main",
-            });
+            let pipeline = TheComputePipeline::new(&device, (shader_module, "main"), &compute_bind_group_info);
 
             (pipeline, wave_data, compute_bind_group)
         };
 
-        let (render_pipeline, square_verts) = {
+        let (render_pipeline, square_verts, square_indices) = {
             let module_vert = device.create_shader_module(include_glsl!(
                 "shaders/draw.vert",
                 naga::ShaderStage::Vertex
@@ -144,32 +146,17 @@ impl EngineBase for Wave {
             ));
 
             let square_verts = Buff::new(&device, &SQUARE_VERTS, &SQUARE_VERTS_DATA);
+            let square_indices = Buff::new(&device, &SQUARE_INDICES, &SQUARE_INDICES_DATA);
 
-            let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: None,
-                layout: Some(
-                    &device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                        label: None,
-                        bind_group_layouts: &[&tex2d_bind_group_info.layout],
-                        push_constant_ranges: &[],
-                    }),
-                ),
-                vertex: wgpu::VertexState {
-                    module: &module_vert,
-                    entry_point: "main",
-                    buffers: &[SQUARE_VERTS.layout_vertex(wgpu::VertexStepMode::Vertex)],
-                },
-                fragment: Some(wgpu::FragmentState {
-                    module: &module_frag,
-                    entry_point: "main",
-                    targets: &[Some(config.view_formats[0].into())],
-                }),
-                primitive: Default::default(),
-                depth_stencil: None,
-                multisample: Default::default(),
-                multiview: None,
-            });
-            (render_pipeline, square_verts)
+            let render_pipeline = TheRenderPipeline::new(
+                &device,
+                (module_vert, "main"),
+                (module_frag, "main"),
+                &[Some(config.view_formats[0].into())],
+                &SQUARE_VERTS,
+                &tex2d_bind_group_info,
+            );
+            (render_pipeline, square_verts, square_indices)
         };
 
         Self {
@@ -179,6 +166,7 @@ impl EngineBase for Wave {
             compute_bind_group,
             out_tex_bind_group,
             square_verts,
+            square_indices,
             frame_num: 0,
             reset: false,
         }
@@ -241,13 +229,11 @@ impl EngineBase for Wave {
 
         {
             let mut pass = cmds.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
-            pass.set_pipeline(&self.compute_pipeline);
-            pass.set_bind_group(
-                0,
+            self.compute_pipeline.dispatch(
+                &mut pass,
+                (SIZE / WORKGROUP_SIZE, SIZE / WORKGROUP_SIZE, 1),
                 &self.compute_bind_group[(self.frame_num % 2) as usize],
-                &[],
             );
-            pass.dispatch_workgroups(SIZE / WORKGROUP_SIZE, SIZE / WORKGROUP_SIZE, 1);
         }
 
         {
@@ -263,10 +249,13 @@ impl EngineBase for Wave {
                 })],
                 depth_stencil_attachment: None,
             });
-            pass.set_pipeline(&self.render_pipeline);
-            pass.set_vertex_buffer(0, self.square_verts.slice(..).into());
-            pass.set_bind_group(0, &self.out_tex_bind_group, &[]);
-            pass.draw(0..6, 0..1);
+            self.render_pipeline.draw_indexed(
+                &mut pass,
+                0..6, 0..1,
+                self.square_indices.slice(..),
+                self.square_verts.slice(..),
+                &self.out_tex_bind_group,
+            );
         }
 
         queue.submit(Some(cmds.finish().into()));

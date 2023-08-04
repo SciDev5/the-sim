@@ -34,12 +34,11 @@ macro_rules! bind_group_info {
                 ]
             };
 
-
-            struct $name<'a> {
+            struct [<$name Info>]<'a> {
                 layout: wgpu::BindGroupLayout,
                 device: &'a wgpu::Device,
             }
-            impl<'a> $name<'a> {
+            impl<'a> [<$name Info>]<'a> {
                 fn new(device: &'a wgpu::Device) -> Self {
                     Self {
                         layout: device.create_bind_group_layout(&[<BGLD_ $name>]),
@@ -50,25 +49,201 @@ macro_rules! bind_group_info {
                 pub fn bind<
                     'data,
                     $([<TImpl $binding_num>] : $crate::new_abstractions::IsRepresentedByLayout<'data, $res_type> + Into<wgpu::BindingResource<'data>>,)*
-                >(&self, $([<binding $binding_num>]: [<TImpl $binding_num>],)*) -> wgpu::BindGroup {
-                    self.device.create_bind_group(
-                        &wgpu::BindGroupDescriptor {
-                            label: None,
-                            layout: &self.layout,
-                            entries: &[
-                                $(
-                                    wgpu::BindGroupEntry {
-                                        binding: $binding_num,
-                                        resource: [<binding $binding_num>].into(),
-                                    },
-                                )*
-                            ]
-                        }
-                    )
+                >(&self, $([<binding $binding_num>]: [<TImpl $binding_num>],)*) -> [<$name>] {
+                    [<$name>] {
+                        binding: self.device.create_bind_group(
+                            &wgpu::BindGroupDescriptor {
+                                label: None,
+                                layout: &self.layout,
+                                entries: &[
+                                    $(
+                                        wgpu::BindGroupEntry {
+                                            binding: $binding_num,
+                                            resource: [<binding $binding_num>].into(),
+                                        },
+                                    )*
+                                ]
+                            }
+                        )
+                    }
+                }
+            }
+            struct $name {
+                binding: wgpu::BindGroup,
+            }
+            impl<'a> crate::new_abstractions::BindGroupMatchesLayout<[<$name Info>]<'a>> for [<$name>] {
+                fn binding(&self) -> &wgpu::BindGroup {
+                    &self.binding
                 }
             }
         }
     };
+}
+pub trait BindGroupMatchesLayout<T> {
+    fn binding(&self) -> &wgpu::BindGroup;
+}
+
+#[macro_export]
+macro_rules! compute_pipeline_info {
+    ($name:ident; $($id:expr => $res_type:ty),* $(,)?) => {
+        paste::paste! {
+            struct $name {
+                pipeline: wgpu::ComputePipeline,
+            }
+            impl<'device> $name {
+                fn new(device: &wgpu::Device, shader: (wgpu::ShaderModule, &'static str), $([<binding $id>]: & $res_type),*) -> Self {
+                    Self {
+                        pipeline: device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                            label: None,
+                            layout: Some(&device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                                label: None,
+                                bind_group_layouts: &[
+                                    $(&[<binding $id>].layout),*
+                                ],
+                                push_constant_ranges: &[] // should look up what this does.
+                            })),
+                            module: &shader.0,
+                            entry_point: shader.1,
+                        }),
+                    }
+                }
+                fn dispatch<
+                    'b,
+                    'c: 'b,
+                    $([<TBind $id>]: $crate::new_abstractions::BindGroupMatchesLayout<$res_type>),*
+                >(&'c self, pass: &mut wgpu::ComputePass<'b>, dims: (u32, u32, u32), $([<binding $id>]: &'b [<TBind $id>]),*) {
+                    pass.set_pipeline(&self.pipeline);
+                    let mut i = 0; 
+                    $(
+                        i += 1;
+                        pass.set_bind_group(
+                            i - 1,
+                            [<binding $id>].binding(),
+                            &[],
+                        );
+                    )*
+                    pass.dispatch_workgroups(dims.0, dims.1, dims.2);
+                }
+            }
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! render_pipeline_info {
+    ($name:ident; $($id:expr => $res_type:ty),* $(,)? ; $($vid:expr => ($vert_type:ty, $step_mode:expr)),+ $(,)? ) => {
+        paste::paste! {
+            struct $name {
+                pipeline: wgpu::RenderPipeline,
+            }
+            impl<'device> $name {
+                fn new(
+                    device: &wgpu::Device,
+                    vertex: (wgpu::ShaderModule, &'static str),
+                    fragment: (wgpu::ShaderModule, &'static str),
+                    targets: &[Option<wgpu::ColorTargetState>],
+                    $([<vertex $vid>]: & $crate::new_abstractions::BuffInfo<$vert_type>,)+
+                    $([<binding $id>]: & $res_type,)*
+                ) -> Self {
+                    Self {
+                        pipeline: device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                            label: None,
+                            layout: Some(&device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                                label: None,
+                                bind_group_layouts: &[
+                                    $(&[<binding $id>].layout),*
+                                ],
+                                push_constant_ranges: &[] // should look up what this does.
+                            })),
+                            
+                            vertex: wgpu::VertexState {
+                                module: &vertex.0,
+                                entry_point: vertex.1,
+                                buffers: &[
+                                    $(
+                                        [<vertex $vid>].layout_vertex($step_mode),
+                                    ),+
+                                ],
+                            },
+                            fragment: Some(wgpu::FragmentState {
+                                module: &fragment.0,
+                                entry_point: fragment.1,
+                                targets,
+                            }),
+                            primitive: Default::default(),
+                            depth_stencil: None,
+                            multisample: Default::default(),
+                            multiview: None,
+                        }),
+                    }
+                }
+                fn draw_indexed<
+                    'data,
+                    'b : 'data,
+                    IndexBuff: $crate::new_abstractions::IndexBuffer + Into<wgpu::BufferSlice<'data>>,
+                    $([<TBinding $id>]: $crate::new_abstractions::BindGroupMatchesLayout<$res_type>),*
+                >(
+                    &'b self,
+                    pass: &mut wgpu::RenderPass<'data>,
+                    indices: std::ops::Range<u32>,
+                    instances: std::ops::Range<u32>,
+                    index_buff: IndexBuff,
+                    $([<vertex $vid>]: $crate::new_abstractions::BuffSlice<'data, $vert_type>,)+
+                    $([<binding $id>]: &'b [<TBinding $id>],)*
+                ) {
+                    pass.set_pipeline(&self.pipeline);
+                    let index_format = index_buff.index_format();
+                    pass.set_index_buffer(index_buff.into(), index_format);
+                    let mut i = 0;
+                    $(
+                        i += 1;
+                        pass.set_vertex_buffer(
+                            i - 1,
+                            [<vertex $vid>].into(),
+                        );
+                    )+
+                    i = 0;
+                    $(
+                        i += 1;
+                        pass.set_bind_group(
+                            i - 1,
+                            [<binding $id>].binding(),
+                            &[],
+                        );
+                    )*
+                    pass.draw_indexed(indices, 0, instances);
+                }
+                // fn dispatch<
+                //     'b,
+                //     'c: 'b,
+                //     $([<TBind $id>]: crate::new_abstractions::BindGroupMatchesLayout<$res_type>),*
+                // >(&'c self, pass: &mut wgpu::ComputePass<'b>, dims: (u32, u32, u32), $([<binding $id>]: &'b [<TBind $id>]),*) {
+                //     pass.set_pipeline(&self.pipeline);
+                //     let mut i = 0; 
+                //     $(
+                //         i += 1;
+                //         pass.set_bind_group(
+                //             i - 1,
+                //             [<binding $id>].binding(),
+                //             &[],
+                //         );
+                //     )*
+                //     pass.dispatch_workgroups(dims.0, dims.1, dims.2);
+                // }
+            }
+        }
+    };
+}
+
+pub trait IndexBuffer {
+    const INDEX_FORMAT: wgpu::IndexFormat;
+    fn index_format(&self) -> wgpu::IndexFormat { Self::INDEX_FORMAT }
+}
+impl<'a> IndexBuffer for BuffSlice<'a, u16> {
+    const INDEX_FORMAT: wgpu::IndexFormat = wgpu::IndexFormat::Uint16;
+}
+impl<'a> IndexBuffer for BuffSlice<'a, u32> {
+    const INDEX_FORMAT: wgpu::IndexFormat = wgpu::IndexFormat::Uint32;
 }
 
 pub trait IsRepresentedByLayout<'data, T> {}
@@ -124,6 +299,7 @@ impl<T: Pod + Zeroable> Buff<T> {
                 usage: wgpu::BufferUsages::COPY_SRC
                     | wgpu::BufferUsages::COPY_DST
                     | wgpu::BufferUsages::VERTEX
+                    | wgpu::BufferUsages::INDEX
                     | wgpu::BufferUsages::UNIFORM
                     | wgpu::BufferUsages::STORAGE, // TODO make more efficient.
             }),
