@@ -99,17 +99,35 @@ vec3 rectilinear_to_spherical(vec3 v) {
     }
 }
 
+mat3 tangent_rectilinear_to_spherical_mat(vec3 p_sph) {
+    vec3 dr = -spherical_to_rectilinear(vec3(1, p_sph.yz));
+    vec3 dth = -spherical_to_rectilinear(vec3(1 / p_sph.x, p_sph.y + 3.14159/2, p_sph.z));
+    vec3 dph = -spherical_to_rectilinear(vec3(1 / p_sph.x * sin(p_sph.y), 3.14159/2, p_sph.z + 3.14159/2));
+
+    return mat3(
+        dr.x, dth.x, dph.x,
+        dr.y, dth.y, dph.y,
+        dr.z, dth.z, dph.z
+    );
+}
+
+mat3 tangent_spherical_to_rectilinear_mat(vec3 p_sph) {
+    return inverse(tangent_rectilinear_to_spherical_mat(p_sph));
+}
+
+
 void main() {
     vec3 d = init_raydir();
     vec3 p = camera.position;
+    vec3 p_sph = rectilinear_to_spherical(p);
 
-    vec3 d_sph = rectilinear_to_spherical(d);
-    vec3 d_rec = spherical_to_rectilinear(d_sph);
+    vec3 d_sph = tangent_rectilinear_to_spherical_mat(p_sph) * d;
+    vec3 d_rec = tangent_spherical_to_rectilinear_mat(p_sph) * d_sph;
 
-    FragColor = abs(background(d) - background(d_rec));
-    // FragColor = background(d);
+    // FragColor = abs(background(d) - background(d_rec));
+    FragColor = background(d)* 0.0 + vec4(d_sph, 0) * 1.0;
 
-    if (d.z > 0.9) {
+    if (acos(dot(normalize(p),d)) < atan(0.1, length(p))) {
         FragColor = vec4(0,0,0,0);
     }
 }
