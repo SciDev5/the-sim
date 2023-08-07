@@ -177,6 +177,7 @@ macro_rules! render_pipeline_info {
                         }),
                     }
                 }
+                #[allow(unused)] // `i` can be unused, not much we can do tho (within reason).
                 fn draw_indexed<
                     'data,
                     'b : 'data,
