@@ -184,13 +184,7 @@ void normalize_null_geodesic_gdiag(vec4 x0, inout vec4 x1) {
     x1[0] = sqrt(abs((dot(x1, g*x1) - g[0]*x1[0]*x1[0]) / (-g[0])));
 }
 
-void main() {
-    vec3 d = init_raydir();
-    vec3 p = camera.position;
-
-    vec4 x0 = vec4(0, rectilinear_to_spherical(p));
-    vec4 x1 = -vec4(0, tangent_rectilinear_to_spherical_mat(x0.yzw) * d);
-    
+bool trace_gdiag(inout vec4 x0, inout vec4 x1) {
     for (int i = 0; i < 1000; i++) {
         // float sin_th = sin(x0[2]);
         // float dt = min(0.01,-0.1/(1-2*x0[1])) * sin_th*sin_th;
@@ -198,15 +192,28 @@ void main() {
         normalize_null_geodesic_gdiag(x0, x1);
         step_geodesic_gdiag(dt, x0, x1);
         if (x0[1] < RS * 1.03) {
-            FragColor = vec4(0,0,0,0);
-            return;
+            return false;
         }
         if (x0[1] > 25*RS && x0[1]*-x1[1] > 0) {
             break;
         }
     }
+    return true;
+}
 
-    FragColor = background(tangent_spherical_to_rectilinear_mat(x0.yzw) * -x1.yzw);
+void main() {
+    vec3 d = init_raydir();
+    vec3 p = camera.position;
+
+    vec4 x0 = vec4(0, rectilinear_to_spherical(p));
+    vec4 x1 = -vec4(0, tangent_rectilinear_to_spherical_mat(x0.yzw) * d);
+    
+    if (trace_gdiag(x0, x1)) {
+        FragColor = background(tangent_spherical_to_rectilinear_mat(x0.yzw) * -x1.yzw);
+    } else {
+        FragColor = vec4(0,0,0,0);
+    }
+
 
     // if (acos(dot(normalize(p),d)) < atan(0.1, length(p))) {
     //     FragColor = vec4(0,0,0,0);
