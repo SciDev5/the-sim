@@ -35,8 +35,11 @@ struct CameraData { // NOTE THAT ORDER MATTERS!!!
     rotation: [f32; 2], // TODO quaternion
     position: [f32; 3],
     fov_y: f32,
-    // _spacer0: u32,
-    // _spacer1: u32,
+
+    activated: u32,
+    _spacer0: u32,
+    _spacer1: u32,
+    _spacer2: u32,
 }
 bind_group_info!(CameraDataGroup; wgpu::ShaderStages::FRAGMENT;
     0 => (BuffInfo::<CameraData>, wgpu::BufferBindingType::Uniform),
@@ -60,6 +63,7 @@ pub struct BlackholeGtx {
     cameradata_modified: bool,
 
     last_mouse_pos: [f64; 2],
+    activated: bool,
 }
 
 impl BlackholeGtx {
@@ -129,6 +133,11 @@ impl EngineBase for BlackholeGtx {
                                 self.cameradata.position[2] -= 0.1;
                                 self.cameradata_modified = true;
                             }
+                            VirtualKeyCode::Space => {
+                                self.activated = !self.activated;
+                                self.cameradata.activated = if self.activated { 1 } else { 0 };
+                                self.cameradata_modified = true;
+                            }
                             
                             _ => {}
                         }
@@ -154,8 +163,10 @@ impl EngineBase for BlackholeGtx {
             position: [0.0,0.0,0.0],
             rotation: [0.0,0.0],
             fov_y: std::f32::consts::FRAC_PI_2, // 45deg
-            // _spacer0:0,
-            // _spacer1:0,
+            activated: 0,
+            _spacer0:0,
+            _spacer1:0,
+            _spacer2:0,
         };
         dbg!((cameradata, std::mem::size_of::<CameraData>()));
         let cameradata_buff = Buff::new(&device, &BuffInfo::<CameraData>::IT, &[cameradata]);
@@ -192,6 +203,7 @@ impl EngineBase for BlackholeGtx {
             cameradata,
             cameradata_modified: false,
             last_mouse_pos: [0.0, 0.0],
+            activated: false,
         }
     }
     fn render(
