@@ -1,3 +1,5 @@
+use std::time::SystemTime;
+
 use bytemuck::{Pod, Zeroable};
 use wgpu::vertex_attr_array;
 use winit::event::VirtualKeyCode;
@@ -37,9 +39,9 @@ struct CameraData { // NOTE THAT ORDER MATTERS!!!
     fov_y: f32,
 
     activated: u32,
+    a: f32,
     _spacer0: u32,
     _spacer1: u32,
-    _spacer2: u32,
 }
 bind_group_info!(CameraDataGroup; wgpu::ShaderStages::FRAGMENT;
     0 => (BuffInfo::<CameraData>, wgpu::BufferBindingType::Uniform),
@@ -160,13 +162,13 @@ impl EngineBase for BlackholeGtx {
 
         let cameradata = CameraData{
             dims: [config.width as f32, config.height as f32],
-            position: [0.0,0.0,0.0],
-            rotation: [0.0,0.0],
+            position: [0.0,-3.0,0.0],
+            rotation: [0.0,3.1415/2.0],
             fov_y: std::f32::consts::FRAC_PI_2, // 45deg
             activated: 0,
+            a: 0.0,
             _spacer0:0,
             _spacer1:0,
-            _spacer2:0,
         };
         dbg!((cameradata, std::mem::size_of::<CameraData>()));
         let cameradata_buff = Buff::new(&device, &BuffInfo::<CameraData>::IT, &[cameradata]);
@@ -215,6 +217,11 @@ impl EngineBase for BlackholeGtx {
     ) {
         let mut enc =
             device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+
+        {
+            self.cameradata.a = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs_f64().sin() as f32;
+            self.cameradata_modified = true;
+        }
 
         if self.cameradata_modified {
             self.cameradata_modified = false;

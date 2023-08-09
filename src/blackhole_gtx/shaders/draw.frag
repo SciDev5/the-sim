@@ -9,6 +9,7 @@ layout (set = 0, binding = 0) uniform UniformBufferObject {
     vec3 position;
     float fov_y;
     int activated;
+    float a;
 } camera;
 
 vec4 background(vec3 dir) {
@@ -127,7 +128,7 @@ float sq(float x) {
 ///////// ----- GR STUFF ----- /////////
 
 const float RS = 1.0;
-const float a = 0.5;
+// const float a = 0.0;
 
 const mat4 g_minkowsky = mat4(
     -1,0,0,0,
@@ -220,57 +221,179 @@ bool trace_schwarzschild(inout vec4 x0, inout vec4 x1) {
 
 //// KERR
 
-mat4 g_kerr_ks(vec4 p) {
-    float x = p[1], y = p[2], z = p[3];
-    // float x = -sq(p[1]), y = -sq(p[2]), z = -sq(p[3]);
+// mat4 g_kerr_ks(vec4 p) {
+//     float x = p[1], y = p[2], z = p[3];
+//     // float x = -sq(p[1]), y = -sq(p[2]), z = -sq(p[3]);
+
+//     float
+//         xx = x*x,
+//         yy = y*y,
+//         zz = z*z,
+//         RR = dot(p.yzw,p.yzw),
+//         aa = a * a;
+
+//     float r = sqrt(
+//         RR - aa + sqrt(
+//             RR*RR + aa*aa - 2*aa*(xx + yy - zz)
+//         )
+//     ) / sqrt(2), rr = r*r;
+    
+//     // float f = RS * r*rr / (rr*rr + aa*zz);
+
+//     // vec4 k = vec4(
+//     //     1,
+//     //     (r * x + a * y) / (rr + aa),
+//     //     (r * y - a * x) / (rr + aa),
+//     //     z / r
+//     // );
+
+//     // return mat4(
+        
+//     // );
+
+    
+//     // // force a = 0
+//     // float r = length(vec3(x,y,z));
+//     // float f = RS / r;
+//     // vec4 k = vec4(0, vec3(x,y,z) / r);
+//     // // vec4 k = vec4(1, vec3(1,1,1));
+
+//     // return g_minkowsky - f * outerProduct(k, k);
+//     float A = 1-RS/r;
+
+//     // float k = sq(1/A);
+//     float k = 1/A;
+
+//     return mat4(
+//         - A, 0, 0, 0,
+//         0, k, 0 , 0,
+//         0, 0, k, 0,
+//         0, 0,0, k
+//     );
+// }
+// mat4[4] dgdx_kerr_ks(vec4 p) {
+//     const float DX = 1.52587891E-5;
+//     mat4[4] dgdx;
+//     dgdx[0] = mat4(
+//         vec4(0, 0, 0, 0),
+//         vec4(0, 0, 0, 0),
+//         vec4(0, 0, 0, 0),
+//         vec4(0, 0, 0, 0)
+//     );
+//     dgdx[1] = (g_kerr_ks(p + vec4(0,DX,0,0)) - g_kerr_ks(p - vec4(0,DX,0,0))) / (2 * DX);
+//     dgdx[2] = (g_kerr_ks(p + vec4(0,0,DX,0)) - g_kerr_ks(p - vec4(0,0,DX,0))) / (2 * DX);
+//     dgdx[3] = (g_kerr_ks(p + vec4(0,0,0,DX)) - g_kerr_ks(p - vec4(0,0,0,DX))) / (2 * DX);
+//     return dgdx;
+// }
+// mat4[4] christoffelsymbols_kerr_ks(vec4 x) {
+//     mat4[4] cs;
+
+//     mat4 g = g_kerr_ks(x);
+//     mat4 g_inv = inverse(g);
+//     mat4[4] dgdx = dgdx_kerr_ks(x);
+
+//     for (int l = 0; l < 4; l++) {
+//         mat4 m = mat4(
+//             0, 0, 0, 0,
+//             0, 0, 0, 0,
+//             0, 0, 0, 0,
+//             0, 0, 0, 0
+//         );
+//         for (int k = 0; k < 4; k++) {
+//             mat4 m_inner = mat4(
+//                 0, 0, 0, 0,
+//                 0, 0, 0, 0,
+//                 0, 0, 0, 0,
+//                 0, 0, 0, 0
+//             );
+//             for (int i = 0; i < 4; i++) {
+//                 for (int j = 0; j < 4; j++) {
+//                     // + d(i) g[j,k]
+//                     m_inner[i][k] += dgdx[i] [j][k];
+//                     // + d(j) g[i,k]
+//                     m_inner[k][j] += dgdx[j] [i][k];
+//                     // - d(k) g[i,j]
+//                     m_inner[i][j] -= dgdx[k] [i][j]; // correct
+//                 }
+//             }
+
+//             m += m_inner / 2 * g_inv[k][l];
+//         }
+//         cs[l] = m;
+//     }
+
+//     return cs;
+// }
+// void step_geodesic_kerr_ks(float dt, inout vec4 x0, inout vec4 x1) {
+//     x0 += dt * x1 * 0.5;
+//     mat4[4] cs = christoffelsymbols_kerr_ks(x0);
+//     vec4 x2 = -vec4(
+//         dot(cs[0]*x1, x1),
+//         dot(cs[1]*x1, x1),
+//         dot(cs[2]*x1, x1),
+//         dot(cs[3]*x1, x1)
+//     );
+//     x1 += dt * x2;
+//     x0 += dt * x1 * 0.5;
+//     // x0 += dt * x1;
+// }
+
+// void normalize_null_geodesic_kerr_ks(vec4 x0, inout vec4 x1) {
+//     mat4 g = g_kerr_ks(x0);
+
+//     // x1.yzw = normalize(x1.yzw);
+//     float A = g[0][0];
+//     float B = 2 * dot(g[0].yzw, x1.yzw);
+//     float C = dot(mat3(g[1].yzw,g[2].yzw,g[3].yzw) * x1.yzw, x1.yzw);
+//     x1[0] = (-B - sqrt(B*B - 4*A*C))/(2*A); // -sqrt in quadratic formula selects for the time-reversed version.
+// }
+
+// bool trace_kerr_ks(inout vec4 x0, inout vec4 x1) {
+//     for (int i = 0; i < 1000; i++) {
+//         float dt = 0.05;
+//         normalize_null_geodesic_kerr_ks(x0, x1);
+//         step_geodesic_kerr_ks(dt, x0, x1);
+
+//         float r = length(x0.yzw);
+//         if (r < RS) {
+//             return false;
+//         }
+//         // if (r > 25*RS) {
+//         //     return true;
+//         // }
+//     }
+//     return true;
+// }
+
+mat4 g_kerr_bl(vec4 p) {
+    float
+        a = camera.a,
+        r = p[1],
+        th = p[2],
+        cos_th = cos(th),
+        sin_th = sin(th),
+        ph = p[3],
+        sigma = r*r + a*a*cos_th*cos_th,
+        delta = r*r-RS*r+a*a;
+    
+    const float C = 1;
 
     float
-        xx = x*x,
-        yy = y*y,
-        zz = z*z,
-        RR = dot(p.yzw,p.yzw),
-        aa = a * a;
-
-    float r = sqrt(
-        RR - aa + sqrt(
-            RR*RR + aa*aa - 2*aa*(xx + yy - zz)
-        )
-    ) / sqrt(2), rr = r*r;
-    
-    // float f = RS * r*rr / (rr*rr + aa*zz);
-
-    // vec4 k = vec4(
-    //     1,
-    //     (r * x + a * y) / (rr + aa),
-    //     (r * y - a * x) / (rr + aa),
-    //     z / r
-    // );
-
-    // return mat4(
-        
-    // );
-
-    
-    // // force a = 0
-    // float r = length(vec3(x,y,z));
-    // float f = RS / r;
-    // vec4 k = vec4(0, vec3(x,y,z) / r);
-    // // vec4 k = vec4(1, vec3(1,1,1));
-
-    // return g_minkowsky - f * outerProduct(k, k);
-    float A = 1-RS/r;
-
-    // float k = sq(1/A);
-    float k = 1/A;
+        t_t = -(1-RS*r/sigma)*C*C,
+        r_r = sigma/delta,
+        th_th = sigma,
+        ph_ph = (r*r+a*a+RS*r*a*a/sigma*sin_th*sin_th)*sin_th*sin_th,
+        t_ph = -2*C*RS*r*a*sin_th*sin_th/sigma;
 
     return mat4(
-        - A, 0, 0, 0,
-        0, k, 0 , 0,
-        0, 0, k, 0,
-        0, 0,0, k
+      t_t, 0, 0, t_ph,
+      0, r_r, 0, 0,
+      0, 0, th_th, 0,
+      t_ph, 0, 0, ph_ph 
     );
+
 }
-mat4[4] dgdx_kerr_ks(vec4 p) {
+mat4[4] dgdx_kerr_bl(vec4 p) {
     const float DX = 1.52587891E-5;
     mat4[4] dgdx;
     dgdx[0] = mat4(
@@ -279,17 +402,17 @@ mat4[4] dgdx_kerr_ks(vec4 p) {
         vec4(0, 0, 0, 0),
         vec4(0, 0, 0, 0)
     );
-    dgdx[1] = (g_kerr_ks(p + vec4(0,DX,0,0)) - g_kerr_ks(p - vec4(0,DX,0,0))) / (2 * DX);
-    dgdx[2] = (g_kerr_ks(p + vec4(0,0,DX,0)) - g_kerr_ks(p - vec4(0,0,DX,0))) / (2 * DX);
-    dgdx[3] = (g_kerr_ks(p + vec4(0,0,0,DX)) - g_kerr_ks(p - vec4(0,0,0,DX))) / (2 * DX);
+    dgdx[1] = (g_kerr_bl(p + vec4(0,DX,0,0)) - g_kerr_bl(p - vec4(0,DX,0,0))) / (2 * DX);
+    dgdx[2] = (g_kerr_bl(p + vec4(0,0,DX,0)) - g_kerr_bl(p - vec4(0,0,DX,0))) / (2 * DX);
+    dgdx[3] = (g_kerr_bl(p + vec4(0,0,0,DX)) - g_kerr_bl(p - vec4(0,0,0,DX))) / (2 * DX);
     return dgdx;
 }
-mat4[4] christoffelsymbols_kerr_ks(vec4 x) {
+mat4[4] christoffelsymbols_kerr_bl(vec4 x) {
     mat4[4] cs;
 
-    mat4 g = g_kerr_ks(x);
+    mat4 g = g_kerr_bl(x);
     mat4 g_inv = inverse(g);
-    mat4[4] dgdx = dgdx_kerr_ks(x);
+    mat4[4] dgdx = dgdx_kerr_bl(x);
 
     for (int l = 0; l < 4; l++) {
         mat4 m = mat4(
@@ -308,11 +431,9 @@ mat4[4] christoffelsymbols_kerr_ks(vec4 x) {
             for (int i = 0; i < 4; i++) {
                 for (int j = 0; j < 4; j++) {
                     // + d(i) g[j,k]
-                    // m_inner[i][k] += dgdx[i] [j][k];
-                    m_inner[i][k] += dgdx[i] [k][j];
+                    m_inner[k][i] += dgdx[i] [j][k];
                     // + d(j) g[i,k]
-                    // m_inner[k][j] += dgdx[j] [i][k];
-                    m_inner[k][j] += dgdx[j] [k][i];
+                    m_inner[j][k] += dgdx[j] [i][k];
                     // - d(k) g[i,j]
                     m_inner[i][j] -= dgdx[k] [i][j]; // correct
                 }
@@ -325,9 +446,9 @@ mat4[4] christoffelsymbols_kerr_ks(vec4 x) {
 
     return cs;
 }
-void step_geodesic_kerr_ks(float dt, inout vec4 x0, inout vec4 x1) {
+void step_geodesic_kerr_bl(float dt, inout vec4 x0, inout vec4 x1) {
     x0 += dt * x1 * 0.5;
-    mat4[4] cs = christoffelsymbols_kerr_ks(x0);
+    mat4[4] cs = christoffelsymbols_kerr_bl(x0);
     vec4 x2 = -vec4(
         dot(cs[0]*x1, x1),
         dot(cs[1]*x1, x1),
@@ -339,31 +460,32 @@ void step_geodesic_kerr_ks(float dt, inout vec4 x0, inout vec4 x1) {
     // x0 += dt * x1;
 }
 
-void normalize_null_geodesic_kerr_ks(vec4 x0, inout vec4 x1) {
-    mat4 g = g_kerr_ks(x0);
+void normalize_null_geodesic_kerr_bl(vec4 x0, inout vec4 x1) {
+    mat4 g = g_kerr_bl(x0);
 
-    // x1.yzw = normalize(x1.yzw);
+    x1.yzw = normalize(x1.yzw);
     float A = g[0][0];
     float B = 2 * dot(g[0].yzw, x1.yzw);
     float C = dot(mat3(g[1].yzw,g[2].yzw,g[3].yzw) * x1.yzw, x1.yzw);
     x1[0] = (-B - sqrt(B*B - 4*A*C))/(2*A); // -sqrt in quadratic formula selects for the time-reversed version.
 }
 
-bool trace_kerr_ks(inout vec4 x0, inout vec4 x1) {
+bool trace_kerr_bl(inout vec4 x0, inout vec4 x1) {
     for (int i = 0; i < 1000; i++) {
-        float dt = 0.05;
-        normalize_null_geodesic_kerr_ks(x0, x1);
-        step_geodesic_kerr_ks(dt, x0, x1);
+        float dt = 0.025;
+        // float dt = 0.025;
+        normalize_null_geodesic_kerr_bl(x0, x1);
+        step_geodesic_kerr_bl(dt, x0, x1);
 
-        float r = length(x0.yzw);
-        if (r < RS) {
+        float R = (RS+sqrt(sq(RS) - 4*sq(camera.a*sin(x0[2]))))/2;
+        if (x0[1] < R) {
             return false;
         }
-        // if (r > 25*RS) {
-        //     return true;
-        // }
+        if (x0[1] > 5*RS) {
+            return true;
+        }
     }
-    return true;
+    return false;
 }
 
 void main() {
@@ -382,14 +504,23 @@ void main() {
         //     FragColor = vec4(0,0,0,0);
         // }
 
-        // Kerr (Kerr-Schild coordinates)
-        vec4 x0 = vec4(0, p);
-        vec4 x1 = -vec4(0, d);
-        if (trace_kerr_ks(x0, x1)) {
-            FragColor = background(-x1.yzw);
+        // Kerr (Boyer-Lindquist)
+        vec4 x0 = vec4(0, rectilinear_to_spherical(p));
+        vec4 x1 = -vec4(0, tangent_rectilinear_to_spherical_mat(x0.yzw) * d);
+        if (trace_kerr_bl(x0, x1)) {
+            FragColor = background(tangent_spherical_to_rectilinear_mat(x0.yzw) * -x1.yzw);
         } else {
             FragColor = vec4(0,0,0,0);
         }
+
+        // // Kerr (Kerr-Schild coordinates)
+        // vec4 x0 = vec4(0, p);
+        // vec4 x1 = -vec4(0, d);
+        // if (trace_kerr_ks(x0, x1)) {
+        //     FragColor = background(-x1.yzw);
+        // } else {
+        //     FragColor = vec4(0,0,0,0);
+        // }
 
         // vec2 v = vec2(uv.x * camera.view_dim.x / camera.view_dim.y, -uv.y);
         // vec4 x0 = vec4(0,v.x,0,v.y)*5 + vec4(0,p);
