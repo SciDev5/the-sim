@@ -391,7 +391,6 @@ mat4 g_kerr_bl(vec4 p) {
       0, 0, th_th, 0,
       t_ph, 0, 0, ph_ph 
     );
-
 }
 mat4[4] dgdx_kerr_bl(vec4 p) {
     const float DX = 1.52587891E-5;
@@ -495,23 +494,23 @@ void main() {
     if (camera.activated != 0
     // ||true
     ) {
-        // // Schwarzschild
+        // Schwarzschild
+        vec4 x0 = vec4(0, rectilinear_to_spherical(p));
+        vec4 x1 = vec4(0, tangent_rectilinear_to_spherical_mat(x0.yzw) * d);
+        if (trace_schwarzschild(x0, x1)) {
+            FragColor = background(tangent_spherical_to_rectilinear_mat(x0.yzw) * x1.yzw);
+        } else {
+            FragColor = vec4(0,0,0,0);
+        }
+
+        // // Kerr (Boyer-Lindquist)  :: NOT CURRENTLY WORKING
         // vec4 x0 = vec4(0, rectilinear_to_spherical(p));
         // vec4 x1 = -vec4(0, tangent_rectilinear_to_spherical_mat(x0.yzw) * d);
-        // if (trace_schwarzschild(x0, x1)) {
+        // if (trace_kerr_bl(x0, x1)) {
         //     FragColor = background(tangent_spherical_to_rectilinear_mat(x0.yzw) * -x1.yzw);
         // } else {
         //     FragColor = vec4(0,0,0,0);
         // }
-
-        // Kerr (Boyer-Lindquist)
-        vec4 x0 = vec4(0, rectilinear_to_spherical(p));
-        vec4 x1 = -vec4(0, tangent_rectilinear_to_spherical_mat(x0.yzw) * d);
-        if (trace_kerr_bl(x0, x1)) {
-            FragColor = background(tangent_spherical_to_rectilinear_mat(x0.yzw) * -x1.yzw);
-        } else {
-            FragColor = vec4(0,0,0,0);
-        }
 
         // // Kerr (Kerr-Schild coordinates)
         // vec4 x0 = vec4(0, p);
@@ -566,7 +565,7 @@ void main() {
         
     } else {
         FragColor = background(d);
-        if (acos(dot(-d,p)) < atan(1/length(p))) {
+        if (acos(dot(-d,normalize(p))) < atan(1/length(p))) {
             FragColor = vec4(0,0,0.5,0);
         }
     }

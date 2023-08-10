@@ -1,5 +1,3 @@
-use std::time::SystemTime;
-
 use bytemuck::{Pod, Zeroable};
 use wgpu::vertex_attr_array;
 use winit::event::VirtualKeyCode;
@@ -218,10 +216,10 @@ impl EngineBase for BlackholeGtx {
         let mut enc =
             device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
-        {
-            self.cameradata.a = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs_f64().sin() as f32;
-            self.cameradata_modified = true;
-        }
+        // {
+        //     self.cameradata.a = std::time::SystemTime::now().duration_since(std::time::SystemTime::UNIX_EPOCH).unwrap().as_secs_f64().sin() as f32;
+        //     self.cameradata_modified = true;
+        // }
 
         if self.cameradata_modified {
             self.cameradata_modified = false;
